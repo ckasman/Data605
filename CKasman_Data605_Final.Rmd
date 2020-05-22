@@ -1,0 +1,304 @@
+---
+title: "CKasman_Data605_Final"
+author: "Christina Kasman"
+date: "5/6/2020"
+output: html_document
+---
+
+Problem 1.
+Using R, generate a random variable X that has 10,000 random uniform numbers from 1 to N, where N can be any number of your choosing greater than or equal to 6.  Then generate a random variable Y that has 10,000 random normal numbers with a mean of μ=σ=(N+1)/2.  
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(corrplot)
+library(MASS)
+```
+
+```{r}
+N<-25
+mu <- sigma <- (N + 1)/2
+
+set.seed(123)
+X <- runif(10000, min=1, max = N)
+Y<-rnorm(10000, mean = mu, sd =sigma)
+
+df <- data.frame(cbind(X,Y))
+```
+```{r}
+hist(X)
+hist(Y)
+```
+
+Calculate as a minimum the below probabilities a through c.  Assume the small letter "x" is estimated as the median of the X variable, and the small letter "y" is estimated as the 1st quartile of the Y variable.  Interpret the meaning of all probabilities.
+ a.   P(X>x | X>y)		b.  P(X>x, Y>y)		c.  P(X<x | X>y)
+```{r}
+x <- median(X)
+y<- quantile(Y, 0.25)
+
+#P(A or B) = P(A) + P(B) - P(A AND B)
+#P(A AND B) = P(A) * P(B)
+round((sum(X>x & X>y)/10000) / (sum(X>y)/10000) , 2)
+```
+```{r}
+round((sum(X>x & Y>y))/10000,2)
+```
+ 
+```{r}
+round(sum(X<x & X>y)/10000 ,2)
+```
+ 
+ 
+ 
+5 points.   Investigate whether P(X>x and Y>y)=P(X>x)P(Y>y) by building a table and evaluating the marginal and joint probabilities.
+
+```{r}
+matrix<-matrix( c(sum(X>x & Y<y),sum(X>x & Y>y), sum(X<x & Y<y),sum(X<x & Y>y)), nrow = 2,ncol = 2)
+matrix<-cbind(matrix,c(matrix[1,1]+matrix[1,2],matrix[2,1]+matrix[2,2]))
+matrix<-rbind(matrix,c(matrix[1,1]+matrix[2,1],matrix[1,2]+matrix[2,2],matrix[1,3]+matrix[2,3]))
+table<-as.data.frame(matrix)
+names(table) <- c("X>x","X<x", "Total")
+row.names(table) <- c("Y<y","Y>y", "Total")
+
+table
+```
+```{r}
+prob_matrix<-matrix/matrix[3,3]
+table2<-as.data.frame(prob_matrix)
+names(table2) <- c("X>x","X<x", "Total")
+row.names(table2) <- c("Y<y","Y>y", "Total")
+table2
+```
+
+P(X>x and Y>y)
+0.3756	
+
+P(X>x)
+.5
+
+P(Y>y)
+.75
+
+
+```{r}
+prob_matrix[3,1]*prob_matrix[2,3]
+```
+Yes, P(X>x and Y>y)=P(X>x)P(Y>y). Both are ~.375
+
+
+5 points.  Check to see if independence holds by using Fisher’s Exact Test and the Chi Square Test.  What is the difference between the two? Which is most appropriate?
+```{r}
+fisher.test(matrix,simulate.p.value=TRUE)
+```
+```{r}
+chisq.test(matrix, correct=TRUE)
+```
+The chi-squared test applies an approximation assuming the sample is large, while the Fisher's exact test runs an exact procedure especially for small-sized samples(typically used only for 2×2 contingency table). Fisher's is most appropriate for this analysis.
+
+
+PART 2
+
+
+5 points.  Descriptive and Inferential Statistics. Provide univariate descriptive statistics and appropriate plots for the training data set.  Provide a scatterplot matrix for at least two of the independent variables and the dependent variable. Derive a correlation matrix for any three quantitative variables in the dataset.  Test the hypotheses that the correlations between each pairwise set of variables is 0 and provide an 80% confidence interval.  Discuss the meaning of your analysis.  Would you be worried about familywise error? Why or why not?
+
+
+
+```{r}
+library(httr)
+#read in data
+train<-read.csv("https://raw.githubusercontent.com/ckasman/Data605/master/train.csv", header=T)
+train<-as.data.frame(train)
+nrow(train)
+ncol(train)
+```
+```{r}
+head(train)
+summary(train)
+```
+There are 1460 rows of data in the training set with 81 columns (1 column is ID and 1 is Salesprice which is our target variable - 79 other columns/variables). There are na values in many of the columns, I decided to change these to 0 for numerical data.
+
+```{r}
+#change na values to 0
+train[is.na(train)] <- 0
+```
+
+Boxplot shows that there are outliers in sales price and lot area
+- will normalize sales price and lot area using log.
+```{r}
+
+numdata_train<-select_if(train, is.numeric)
+factdata_train<-select_if(train, is.factor)
+boxplot(numdata_train, las =2)
+```
+Show histogram of target variable - sales price
+```{r}
+hist(train$SalePrice,main = "Histogram of Sale Price", col = "pink")
+```
+
+
+Use log to normalize sales prices
+```{r}
+train$SalePrice<-log(train$SalePrice)
+hist(train$SalePrice,main = "Histogram of Sale Price (log)", col = "pink")
+```
+
+
+
+```{r}
+hist(train$LotArea,main = "Histogram of Lot Area", col = "pink")
+```
+
+```{r}
+train$LotArea<-log(train$SalePrice)
+hist(train$LotArea,main = "Histogram of Lot Area (log)", col = "pink")
+```
+
+
+
+```{r}
+numdata_train<-select_if(train, is.numeric)
+#outliers_LotArea <- boxplot(train$LotArea,plot=FALSE)$out
+#print(outliers_LotArea)
+#train[which(train$LotArea %in% outliers_LotArea),]
+#train<- train[-which(train$LotArea %in% outliers_LotArea),]
+#numdata_train<-select_if(train, is.numeric)
+```
+
+```{r}
+library(reshape)
+library(ggplot2)
+dens <-melt(numdata_train)
+ggplot(dens, aes(value)) + geom_density(fill = "pink") + facet_wrap(~variable, 
+    scales = "free")
+```
+```{r}
+corrplot(cor(numdata_train), method="circle")
+```
+
+Overall Quality, Lot Area, GrLivArea (Above grade (ground) living area square feet), Total Basement SF, 
+
+
+```{r}
+hist(train$OverallQual, main = "Histogram of Overall Quality", col = "light blue")
+```
+
+```{r}
+train$OverallQual2 <- as.factor(as.character(train$OverallQual))
+ggplot(train, aes(x=OverallQual, y=SalePrice, fill=OverallQual2)) + geom_boxplot()
+```
+
+Scatterplot shows that lot area is highly correlated to sales price
+```{r}
+plot(train$LotArea, train$SalePrice, main="Scatterplot of Lot Area vs Sale Price")
+```
+```{r}
+plot(train$TotalBsmtSF, train$SalePrice, main="Scatterplot of Total Basement SF vs Sale Price")
+```
+
+
+```{r}
+Bldgtype2 <- as.factor(as.character(train$BldgType))
+ggplot(train, aes(x=BldgType, y=SalePrice, fill=Bldgtype2)) + geom_boxplot()
+```
+```{r}
+Neighborhood2 <- as.factor(as.character(train$Neighborhood))
+ggplot(train, aes(x=Neighborhood, y=SalePrice, fill=Neighborhood2)) + geom_boxplot()
+```
+
+
+
+Correlation Matrix
+```{r}
+correlationData<-dplyr::select(train,SalePrice,LotArea,OverallQual)
+correlationMatrix<-round(cor(correlationData),4)
+correlationMatrix
+
+corrplot(cor(correlationData), method="circle")
+```
+
+Test the hypotheses that the correlations between each pairwise set of variables is 0 and provide an 80% confidence interval.
+```{r}
+cor.test(correlationData$SalePrice,correlationData$LotArea, conf.level = 0.8)
+```
+```{r}
+cor.test(correlationData$SalePrice,correlationData$OverallQual, conf.level = 0.8)
+```
+
+5 points. Linear Algebra and Correlation.  Invert your correlation matrix from above. (This is known as the precision matrix and contains variance inflation factors on the diagonal.) Multiply the correlation matrix by the precision matrix, and then multiply the precision matrix by the correlation matrix. Conduct LU decomposition on the matrix.  
+
+Precision Matrix:
+```{r}
+precisionMatrix<-solve(correlationMatrix)
+round(precisionMatrix,2)
+```
+```{r}
+round(precisionMatrix %*% correlationMatrix,2)
+```
+
+```{r}
+round(correlationMatrix %*% precisionMatrix  ,2)
+```
+
+Conduct LU decomposition on the matrix.
+```{r}
+library(matrixcalc)
+decompmatrix = lu.decomposition(correlationMatrix)
+decompmatrix
+```
+
+
+5 points.  Calculus-Based Probability & Statistics.  Many times, it makes sense to fit a closed form distribution to data.  Select a variable in the Kaggle.com training dataset that is skewed to the right, shift it so that the minimum value is absolutely above zero if necessary.  Then load the MASS package and run fitdistr to fit an exponential probability density function.  (See  https://stat.ethz.ch/R-manual/R-devel/library/MASS/html/fitdistr.html ).  Find the optimal value of λ for this distribution, and then take 1000 samples from this exponential distribution using this value (e.g., rexp(1000, λ)).  Plot a histogram and compare it with a histogram of your original variable.   Using the exponential pdf, find the 5th and 95th percentiles using the cumulative distribution function (CDF).   Also generate a 95% confidence interval from the empirical data, assuming normality.  Finally, provide the empirical 5th percentile and 95th percentile of the data.  Discuss.
+```{r}
+Fit<-train$TotalBsmtSF
+min(Fit)
+fit2 <- fitdistr(Fit, "exponential")
+fit2
+```
+Plot a histogram and compare it with a histogram of your original variable.
+```{r}
+l<-fit2$estimate
+optval<- rexp(1000,l)
+hist(optval,breaks = 100)
+```
+```{r}
+hist(Fit,breaks=100)
+```
+Using the exponential pdf, find the 5th and 95th percentiles using the cumulative distribution function (CDF).   Also generate a 95% confidence interval from the empirical data, assuming normality.  Finally, provide the empirical 5th percentile and 95th percentile of the data.
+```{r}
+quantile(optval, probs=c(0.05, 0.95))
+
+```
+```{r}
+normal<-rnorm(length(Fit),mean(Fit),sd(Fit))
+hist(normal)
+quantile(normal, probs=c(0.05, 0.95))
+```
+
+
+```{r}
+quantile(Fit, probs=c(0.05, 0.95))
+```
+
+
+10 points.  Modeling.  Build some type of multiple regression  model and submit your model to the competition board.  Provide your complete model summary and results with analysis.  Report your Kaggle.com user name and score.
+
+```{r}
+model <- lm(SalePrice ~ LotArea+OverallQual+ GrLivArea+ TotalBsmtSF+ FullBath+X1stFlrSF,  data = train)
+summary(model)
+```
+
+```{r}
+hist(model$residuals, breaks=60, main = "Histogram of Residuals", xlab= "")
+qqnorm(model$residuals)
+qqline(model$residuals)
+```
+The p value is less than 0.05 so we can reject the null hypothesis and conclude the model is statistically significant. Overall Quality, Lot Area, GRLivArea, and Total BsmtSF are all siginificant based on p-values with Lot Area being the most significant predictor.
+
+The reported R squared value shows that this model accounts for roughly 99% of the data's variation.
+
+The F-Statistic of 3.41e+05 with a very small p-value show us that the currect model is better than the model with one less predictor.
+
+Residual standard error: 0.01066 on 1453 degrees of freedom. The Residual Standard Error is the average amount that the response will deviate from the true regression line.
+
+This model is a good fit, but there may be some covariance specifically with overall quality as a predictor.
+
